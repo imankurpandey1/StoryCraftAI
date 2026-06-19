@@ -15,8 +15,8 @@ class Settings:
     DB_PATH = Path(os.environ.get("STORYCRAFT_DB_PATH", BASE_DIR / "backend" / "database" / "storycraft.db"))
     MODEL_CACHE_DIR = Path(os.environ.get("STORYCRAFT_MODEL_CACHE_DIR", BASE_DIR / "backend" / "models"))
     MAX_PROMPT_CHARS = int(os.environ.get("STORYCRAFT_MAX_PROMPT_CHARS", "5000"))
-    FRONTEND_ORIGIN = os.environ.get("STORYCRAFT_FRONTEND_ORIGIN", "http://127.0.0.1:5173")
-    CORS_ORIGINS = [origin.strip() for origin in os.environ.get("STORYCRAFT_CORS_ORIGINS", FRONTEND_ORIGIN).split(",") if origin.strip()]
+    FRONTEND_ORIGIN = os.environ.get("STORYCRAFT_FRONTEND_ORIGIN", "*")
+    CORS_ORIGINS = "*"
 
     GENRES = [
         "Fantasy",
