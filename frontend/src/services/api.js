@@ -15,6 +15,8 @@ async function request(path, options = {}) {
 export const api = {
   generateStory: (body) => request("/generate-story", { method: "POST", body: JSON.stringify(body) }),
   completeStory: (body) => request("/complete-story", { method: "POST", body: JSON.stringify(body) }),
+  translateStory: (body) => request("/translate-story", { method: "POST", body: JSON.stringify(body) }),
+  chatRefine: (body) => request("/chat-refine", { method: "POST", body: JSON.stringify(body) }),
   saveStory: (body) => request("/save-story", { method: "POST", body: JSON.stringify(body) }),
   getStories: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== "" && value !== undefined)).toString();

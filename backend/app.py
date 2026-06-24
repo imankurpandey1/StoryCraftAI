@@ -57,6 +57,60 @@ def create_app() -> Flask:
             return error_response("Story completion failed. Check that the selected model is available and try again.", 500)
 
 
+    @app.post("/translate-story")
+    def translate_story():
+        payload = request.get_json(silent=True) or {}
+        text = payload.get("text", "").strip()
+        target_language = payload.get("language", "English").strip()
+        model = payload.get("model", "distilgpt2")
+        
+        if not text:
+            return error_response("Text to translate cannot be empty.")
+            
+        params = {
+            "model": model,
+            "max_tokens": min(500, int(len(text.split()) * 1.5) + 50),
+            "temperature": 0.3,
+            "top_k": 50,
+            "top_p": 0.92,
+            "language": target_language,
+            "genre": "Translation",
+        }
+        try:
+            result = engine.generate(text, params, mode="translation")
+            return jsonify({"success": True, "data": result})
+        except Exception:
+            current_app.logger.exception("Story translation failed")
+            return error_response("Translation failed. Try again.", 500)
+
+    @app.post("/chat-refine")
+    def chat_refine():
+        payload = request.get_json(silent=True) or {}
+        messages = payload.get("messages", [])
+        model = payload.get("model", "qwen2.5-0.5b-instruct")
+        
+        if not messages:
+            return error_response("Messages cannot be empty.")
+            
+        system_prompt = "You are an expert story brainstormer. Ask the user 1 or 2 short, probing questions to flesh out their story idea (character, setting, conflict). Be encouraging and concise."
+        formatted_messages = [{"role": "system", "content": system_prompt}] + messages
+        
+        try:
+            generator = engine._load_pipeline(model)
+            full_prompt = generator.tokenizer.apply_chat_template(formatted_messages, tokenize=False, add_generation_prompt=True)
+            outputs = generator(
+                full_prompt,
+                max_new_tokens=150,
+                temperature=0.8,
+                do_sample=True,
+                return_full_text=False
+            )
+            reply = outputs[0]["generated_text"].strip()
+            return jsonify({"success": True, "data": {"reply": reply}})
+        except Exception:
+            current_app.logger.exception("Chat refine failed")
+            return error_response("Chat failed. Try again.", 500)
+
     @app.post("/save-story")
     def save_story():
         payload = request.get_json(silent=True) or {}
@@ -69,9 +123,9 @@ def create_app() -> Flask:
             story_word_count = int(payload["word_count"])
             reading_time = float(payload["reading_time"])
             generation_time = float(payload["generation_time"])
-            temperature = float(payload.get("temperature", 0.85))
-            top_k = int(payload.get("top_k", 50))
-            top_p = float(payload.get("top_p", 0.92))
+            temperature = 0.85
+            top_k = 50
+            top_p = 0.92
             max_tokens = int(payload.get("max_tokens", 180))
             language = payload.get("language", "English")
         except (TypeError, ValueError):
@@ -86,9 +140,10 @@ def create_app() -> Flask:
                 INSERT INTO stories (
                     title, prompt, genre, generated_story, original_text, continuation,
                     combined_story, summary, model_used, timestamp, rating, word_count,
-                    reading_time, generation_time, temperature, top_k, top_p, max_tokens, language, mode
+                    reading_time, generation_time, temperature, top_k, top_p, max_tokens, language, mode,
+                    visibility, author_name
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload["title"],
@@ -111,6 +166,8 @@ def create_app() -> Flask:
                     max_tokens,
                     language,
                     payload.get("mode", "generation"),
+                    payload.get("visibility", "private"),
+                    payload.get("author_name", "Anonymous"),
                 ),
             )
             conn.commit()
@@ -122,11 +179,15 @@ def create_app() -> Flask:
         search = f"%{request.args.get('search', '').strip()}%"
         genre = request.args.get("genre", "").strip()
         model = request.args.get("model", "").strip()
+        visibility = request.args.get("visibility", "").strip()
         min_rating, rating_error = validate_rating(request.args.get("min_rating")) if request.args.get("min_rating") else (0, None)
         if rating_error:
             return error_response(rating_error)
         query = "SELECT * FROM stories WHERE (title LIKE ? OR prompt LIKE ? OR generated_story LIKE ?)"
         params = [search, search, search]
+        if visibility:
+            query += " AND visibility = ?"
+            params.append(visibility)
         if genre:
             query += " AND genre = ?"
             params.append(genre)

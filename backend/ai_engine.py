@@ -54,17 +54,25 @@ class StoryCraftEngine:
     def _prompt_template(prompt: str, genre: str, mode: str, language: str) -> str:
         if mode == "completion":
             return f"[{language}]\n{prompt.rstrip()}\n"
+        elif mode == "translation":
+            return f"Translate the following text into {language}:\n\n{prompt.rstrip()}\n\nTranslation:"
         return f"[{language}] {genre} story:\n{prompt.rstrip()}\n"
 
     @classmethod
     def _build_model_prompt(cls, generator, prompt: str, genre: str, mode: str, model_key: str, language: str) -> str:
         if not Settings.MODEL_REGISTRY[model_key].get("chat_template"):
             return cls._prompt_template(prompt, genre, mode, language)
-        task = "Continue the following unfinished story" if mode == "completion" else "Write a complete short story from the following premise"
+        
+        if mode == "translation":
+            task = f"Translate the following text into fluent {language}."
+        else:
+            base_task = "Continue the following unfinished story" if mode == "completion" else "Write a complete short story from the following premise"
+            task = f"You are a creative writer. {base_task} in the {genre} genre. Write the story entirely in {language}. Keep the plot coherent, retain named details, and avoid repetition."
+            
         messages = [
             {
                 "role": "system",
-                "content": f"You are a creative writer. {task} in the {genre} genre. Write the story entirely in {language}. Keep the plot coherent, retain named details, and avoid repetition.",
+                "content": task if mode == "translation" else task,
             },
             {"role": "user", "content": prompt},
         ]

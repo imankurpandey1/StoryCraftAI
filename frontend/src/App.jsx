@@ -33,10 +33,12 @@ function SettingsPanel({ params, setParams }) {
       <Select label="Language" value={params.language} onChange={(language) => setParams({ ...params, language })} options={languages} />
       <Select label="Genre" value={params.genre} onChange={(genre) => setParams({ ...params, genre })} options={genres} />
       <Select label="Model" value={params.model} onChange={(model) => setParams({ ...params, model })} options={modelOptions} />
-      <Slider label="Temperature" value={params.temperature} min={0.1} max={1.8} step={0.05} onChange={(temperature) => setParams({ ...params, temperature })} />
-      <Slider label="Top-K" value={params.top_k} min={1} max={100} step={1} onChange={(top_k) => setParams({ ...params, top_k })} />
-      <Slider label="Top-P" value={params.top_p} min={0.1} max={1} step={0.01} onChange={(top_p) => setParams({ ...params, top_p })} />
       <Slider label="Max Tokens" value={params.max_tokens} min={30} max={500} step={10} onChange={(max_tokens) => setParams({ ...params, max_tokens })} />
+      <div className="flex flex-col gap-2">
+        <label className="text-sm font-bold uppercase tracking-widest text-slate-400">Author Name</label>
+        <input type="text" value={params.author_name} onChange={(e) => setParams({ ...params, author_name: e.target.value })} className="rounded-xl border border-white/10 bg-black/20 p-3 text-sm text-slate-200 outline-none focus:border-emerald-500/50" />
+      </div>
+      <Select label="Visibility" value={params.visibility} onChange={(visibility) => setParams({ ...params, visibility })} options={["private", "public"]} />
     </Card>
   );
 }
@@ -67,6 +69,31 @@ function StoryResult({ result }) {
     }
   };
 
+  const [translating, setTranslating] = useState(false);
+  const handleTranslate = async (e) => {
+    const lang = e.target.value;
+    if (!lang) return;
+    setTranslating(true);
+    const text = result.combined_story || result.generated_story;
+    const promise = api.translateStory({ text, language: lang, model: result.model_key || "qwen2.5-0.5b-instruct" });
+    toast.promise(promise, { loading: `Translating to ${lang}...`, success: "Translated!", error: "Translation failed" });
+    try {
+      const res = await promise;
+      if (res.success) {
+        if (setResult) {
+          setResult({ ...result, combined_story: res.data.combined_story, generated_story: res.data.combined_story, language: lang });
+        }
+        if (isReciting) {
+          window.speechSynthesis.cancel();
+          setIsReciting(false);
+        }
+      }
+    } finally {
+      setTranslating(false);
+      e.target.value = "";
+    }
+  };
+
   if (!result) return null;
   const story = result.combined_story || result.generated_story;
   return (
@@ -77,7 +104,11 @@ function StoryResult({ result }) {
           <h2 className="mt-2 text-2xl font-black">{result.title}</h2>
           <p className="mt-2 text-sm text-slate-400">{result.summary}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <select disabled={translating} onChange={handleTranslate} value="" className="btn-secondary h-auto py-3 px-4 text-sm font-bold appearance-none outline-none focus:ring-2 focus:ring-emerald-400/50">
+            <option value="" disabled>Translate...</option>
+            {languages.map((l) => <option key={l} value={l}>{l}</option>)}
+          </select>
           <button onClick={toggleRecite} className={`btn-secondary h-auto py-3 px-4 text-sm font-bold ${isReciting ? "animate-pulse border-emerald-400 bg-emerald-400/20 shadow-[0_0_20px_rgba(16,185,129,0.5)]" : ""}`}>
             {isReciting ? <VolumeX size={18} /> : <Volume2 size={18} />}
             {isReciting ? "Stop Reciting" : "Read Aloud"}
@@ -144,11 +175,55 @@ function Dashboard({ analytics }) {
   );
 }
 
+function InteractiveBuilder({ prompt, setPrompt, onGenerate }) {
+  const [messages, setMessages] = useState([{ role: "assistant", content: "Hi! Let's brainstorm your story. What kind of character, setting, or conflict do you have in mind?" }]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const send = async () => {
+    if (!input.trim()) return;
+    const newMsgs = [...messages, { role: "user", content: input }];
+    setMessages(newMsgs);
+    setInput("");
+    setLoading(true);
+    try {
+      const res = await api.chatRefine({ messages: newMsgs });
+      if (res.success) {
+        setMessages([...newMsgs, { role: "assistant", content: res.data.reply }]);
+        setPrompt(newMsgs.filter(m => m.role === "user").map(m => m.content).join(" "));
+      }
+    } catch (e) {
+      toast.error("Chat failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Card className="flex flex-col gap-4 h-[400px]">
+      <div className="flex-1 overflow-y-auto space-y-4 pr-2 flex flex-col">
+        {messages.map((m, i) => (
+          <div key={i} className={`p-3 rounded-xl max-w-[85%] ${m.role === 'assistant' ? 'bg-emerald-400/10 text-emerald-100 self-start' : 'bg-white/10 text-white self-end'}`}>
+            <p className="text-sm">{m.content}</p>
+          </div>
+        ))}
+        {loading && <div className="text-emerald-400 animate-pulse text-sm">Brainstorming...</div>}
+      </div>
+      <div className="flex gap-2">
+        <input className="input flex-1" placeholder="Type your idea..." value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()} />
+        <button className="btn-secondary" onClick={send} disabled={loading}>Send</button>
+      </div>
+      <button className="btn-primary w-full mt-2" onClick={onGenerate}>Write Story</button>
+    </Card>
+  );
+}
+
 function GeneratorPage({ onSaved }) {
   const [params, setParams] = useState(defaultParams);
   const [prompt, setPrompt] = useState("");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState("static");
   const storyText = result?.combined_story || result?.generated_story || "";
 
   const generate = async () => {
@@ -183,9 +258,17 @@ function GeneratorPage({ onSaved }) {
   return (
     <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
       <div className="space-y-6">
-        <Card>
-          <textarea className="input min-h-56 resize-y" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Enter a cinematic prompt with a character, setting, and conflict..." />
-        </Card>
+        <div className="flex justify-end gap-4 mb-2">
+          <button className={`text-sm font-bold pb-1 border-b-2 transition-all ${mode === 'static' ? 'border-emerald-400 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`} onClick={() => setMode("static")}>Quick Prompt</button>
+          <button className={`text-sm font-bold pb-1 border-b-2 transition-all ${mode === 'brainstorm' ? 'border-emerald-400 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`} onClick={() => setMode("brainstorm")}>Interactive Brainstorm</button>
+        </div>
+        {mode === "static" ? (
+          <Card>
+            <textarea className="input min-h-56 resize-y" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Enter a cinematic prompt with a character, setting, and conflict..." />
+          </Card>
+        ) : (
+          <InteractiveBuilder prompt={prompt} setPrompt={setPrompt} onGenerate={generate} />
+        )}
         <ActionBar
           loading={loading}
           onGenerate={generate}
@@ -270,11 +353,12 @@ function StarRating({ value, onChange }) {
 
 function LibraryPage({ onSaved }) {
   const [stories, setStories] = useState([]);
+  const [tab, setTab] = useState("private");
   const [filters, setFilters] = useState({ search: "", genre: "", min_rating: "" });
   const [editing, setEditing] = useState(null);
 
-  const load = async () => setStories(await api.getStories(filters));
-  useEffect(() => { load().catch((error) => toast.error(error.message)); }, []);
+  const load = async () => setStories(await api.getStories({ ...filters, visibility: tab }));
+  useEffect(() => { load().catch((error) => toast.error(error.message)); }, [tab]);
 
   const deleteStory = async (id) => {
     await api.deleteStory(id);
@@ -297,8 +381,19 @@ function LibraryPage({ onSaved }) {
     load();
   };
 
+  const toggleVisibility = async (story) => {
+    const newVis = story.visibility === "public" ? "private" : "public";
+    await api.updateStory(story.id, { ...story, visibility: newVis });
+    toast.success(`Story is now ${newVis}`);
+    load();
+  };
+
   return (
     <div className="space-y-6">
+      <div className="flex gap-4 border-b border-white/10 pb-2">
+        <button className={`text-lg font-bold pb-2 border-b-2 ${tab === 'private' ? 'border-emerald-400 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`} onClick={() => setTab("private")}>My Private Library</button>
+        <button className={`text-lg font-bold pb-2 border-b-2 ${tab === 'public' ? 'border-emerald-400 text-emerald-400' : 'border-transparent text-slate-400 hover:text-white'}`} onClick={() => setTab("public")}>Public Discover Feed</button>
+      </div>
       <Card>
         <div className="grid gap-3 md:grid-cols-5">
           <input className="input md:col-span-2" placeholder="Search stories..." value={filters.search} onChange={(event) => setFilters({ ...filters, search: event.target.value })} />
@@ -313,7 +408,7 @@ function LibraryPage({ onSaved }) {
             <Card>
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="max-w-3xl">
-                  <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">{story.genre} | {story.model_used} | {story.language}</p>
+                  <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">{story.genre} | {story.model_used} | {story.language} {story.visibility === 'public' && ` | By ${story.author_name}`}</p>
                   <h3 className="mt-2 text-xl font-black">{story.title}</h3>
                   <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-400">{story.generated_story}</p>
                   <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
@@ -322,6 +417,8 @@ function LibraryPage({ onSaved }) {
                 </div>
                 <div className="flex flex-wrap gap-2 lg:justify-end">
                   <StarRating value={story.rating} onChange={(rating) => rate(story.id, rating)} />
+                  {tab === "private" && <button className="btn-secondary" onClick={() => toggleVisibility(story)}>Make Public</button>}
+                  {tab === "public" && <button className="btn-secondary" onClick={() => toggleVisibility(story)}>Make Private</button>}
                   <button className="btn-secondary" onClick={() => setEditing(story)}>Edit</button>
                   <button className="btn-secondary" onClick={() => copyText(story.generated_story).then(() => toast.success("Copied"))}>Copy</button>
                   <button className="btn-secondary" onClick={() => downloadTxt(`${story.title}.txt`, story.generated_story)}>TXT</button>

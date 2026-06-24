@@ -29,7 +29,9 @@ CREATE TABLE IF NOT EXISTS stories (
     top_p REAL NOT NULL,
     max_tokens INTEGER NOT NULL,
     language TEXT NOT NULL DEFAULT 'English',
-    mode TEXT NOT NULL DEFAULT 'generation'
+    mode TEXT NOT NULL DEFAULT 'generation',
+    visibility TEXT NOT NULL DEFAULT 'private',
+    author_name TEXT NOT NULL DEFAULT 'Anonymous'
 );
 
 CREATE INDEX IF NOT EXISTS idx_stories_timestamp ON stories(timestamp);
