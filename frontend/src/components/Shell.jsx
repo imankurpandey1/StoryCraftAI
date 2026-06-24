@@ -1,11 +1,10 @@
 import { motion } from "framer-motion";
-import { BarChart3, BookOpen, Brain, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2 } from "lucide-react";
+import { BarChart3, BookOpen, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2 } from "lucide-react";
 
 const navItems = [
   ["Dashboard", Home],
   ["Story Generator", Wand2],
   ["Story Completion", Sparkles],
-  ["Model Comparison", Brain],
   ["Story Library", Library],
   ["Analytics", BarChart3],
   ["Ratings", Star],

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import toast from "react-hot-toast";
 import { Activity, BookOpen, Clock, Database, Gauge, Sparkles, Star, Wand2, Volume2, VolumeX } from "lucide-react";
 import Shell, { Card, MetricCard } from "./components/Shell.jsx";
-import { ActionBar, defaultParams, genres, Select, Slider } from "./components/Controls.jsx";
+import { ActionBar, defaultParams, genres, languages, Select, Slider } from "./components/Controls.jsx";
 import { BarMetricChart, DonutChart, LineMetricChart, TrendChart } from "./components/Charts.jsx";
 import { api } from "./services/api.js";
 import { copyText, downloadPdf, downloadTxt, readingLabel } from "./utils/downloads.js";
@@ -29,6 +30,7 @@ function useAnalytics() {
 function SettingsPanel({ params, setParams }) {
   return (
     <Card className="space-y-5">
+      <Select label="Language" value={params.language} onChange={(language) => setParams({ ...params, language })} options={languages} />
       <Select label="Genre" value={params.genre} onChange={(genre) => setParams({ ...params, genre })} options={genres} />
       <Select label="Model" value={params.model} onChange={(model) => setParams({ ...params, model })} options={modelOptions} />
       <Slider label="Temperature" value={params.temperature} min={0.1} max={1.8} step={0.05} onChange={(temperature) => setParams({ ...params, temperature })} />
@@ -53,6 +55,12 @@ function StoryResult({ result }) {
     } else {
       const text = result?.combined_story || result?.generated_story || "";
       const utterance = new SpeechSynthesisUtterance(text);
+      const langMap = {
+        "English": "en-US", "Spanish": "es-ES", "French": "fr-FR", 
+        "German": "de-DE", "Italian": "it-IT", "Portuguese": "pt-BR", 
+        "Japanese": "ja-JP", "Chinese": "zh-CN", "Hindi": "hi-IN", "Russian": "ru-RU"
+      };
+      utterance.lang = langMap[result?.language] || langMap[result?.parameters?.language] || "en-US";
       utterance.onend = () => setIsReciting(false);
       window.speechSynthesis.speak(utterance);
       setIsReciting(true);
@@ -70,7 +78,7 @@ function StoryResult({ result }) {
           <p className="mt-2 text-sm text-slate-400">{result.summary}</p>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={toggleRecite} className="btn-secondary h-auto py-3 px-4 text-sm font-bold">
+          <button onClick={toggleRecite} className={`btn-secondary h-auto py-3 px-4 text-sm font-bold ${isReciting ? "animate-pulse border-emerald-400 bg-emerald-400/20 shadow-[0_0_20px_rgba(16,185,129,0.5)]" : ""}`}>
             {isReciting ? <VolumeX size={18} /> : <Volume2 size={18} />}
             {isReciting ? "Stop Reciting" : "Read Aloud"}
           </button>
@@ -248,55 +256,6 @@ function CompletionPage({ onSaved }) {
   );
 }
 
-function ComparisonPage() {
-  const [params, setParams] = useState({ ...defaultParams, model: "gpt2" });
-  const [prompt, setPrompt] = useState("");
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const chartData = useMemo(() => (data?.results || []).map((item) => ({ model: item.model_used, ...item.metrics })), [data]);
-
-  const compare = async () => {
-    setLoading(true);
-    try {
-      setData(await api.compareModels({ prompt, ...params }));
-      toast.success("Model comparison completed");
-    } catch (error) {
-      toast.error(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <Card><textarea className="input min-h-40" value={prompt} onChange={(event) => setPrompt(event.target.value)} placeholder="Enter one prompt to compare GPT-2 and DistilGPT-2..." /></Card>
-      <div className="grid gap-4 md:grid-cols-4">
-        <Select label="Genre" value={params.genre} onChange={(genre) => setParams({ ...params, genre })} options={genres} />
-        <Slider label="Temperature" value={params.temperature} min={0.1} max={1.8} step={0.05} onChange={(temperature) => setParams({ ...params, temperature })} />
-        <Slider label="Top-P" value={params.top_p} min={0.1} max={1} step={0.01} onChange={(top_p) => setParams({ ...params, top_p })} />
-        <Slider label="Max Tokens" value={params.max_tokens} min={30} max={500} step={10} onChange={(max_tokens) => setParams({ ...params, max_tokens })} />
-      </div>
-      <button disabled={loading} onClick={compare} className="btn-primary">{loading ? "Comparing..." : "Compare GPT-2 vs DistilGPT-2"}</button>
-      {data && (
-        <>
-          <div className="grid gap-6 xl:grid-cols-2">
-            {data.results.map((result) => <StoryResult key={result.model_used} result={result} />)}
-          </div>
-          <Card>
-            <h3 className="mb-4 text-lg font-black">Comparison Metrics</h3>
-            <BarMetricChart data={chartData} xKey="model" bars={[
-              { key: "coherence", name: "Coherence" },
-              { key: "creativity", name: "Creativity" },
-              { key: "context_retention", name: "Context Retention" },
-              { key: "response_speed", name: "Speed" }
-            ]} />
-          </Card>
-        </>
-      )}
-    </div>
-  );
-}
-
 function StarRating({ value, onChange }) {
   return (
     <div className="flex gap-1">
@@ -348,30 +307,32 @@ function LibraryPage({ onSaved }) {
           <button className="btn-primary" onClick={load}>Apply Filters</button>
         </div>
       </Card>
-      <div className="grid gap-5">
+      <motion.div initial="hidden" animate="show" variants={{ hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.1 } } }} className="grid gap-5">
         {stories.map((story) => (
-          <Card key={story.id}>
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-3xl">
-                <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">{story.genre} | {story.model_used}</p>
-                <h3 className="mt-2 text-xl font-black">{story.title}</h3>
-                <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-400">{story.generated_story}</p>
-                <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                  <span>{story.word_count} words</span><span>{readingLabel(story.reading_time)}</span><span>{story.generation_time}s</span>
+          <motion.div variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } }} key={story.id}>
+            <Card>
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-3xl">
+                  <p className="text-xs font-bold uppercase tracking-[0.25em] text-emerald-300">{story.genre} | {story.model_used} | {story.language}</p>
+                  <h3 className="mt-2 text-xl font-black">{story.title}</h3>
+                  <p className="mt-2 line-clamp-3 text-sm leading-6 text-slate-400">{story.generated_story}</p>
+                  <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
+                    <span>{story.word_count} words</span><span>{readingLabel(story.reading_time)}</span><span>{story.generation_time}s</span>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-2 lg:justify-end">
+                  <StarRating value={story.rating} onChange={(rating) => rate(story.id, rating)} />
+                  <button className="btn-secondary" onClick={() => setEditing(story)}>Edit</button>
+                  <button className="btn-secondary" onClick={() => copyText(story.generated_story).then(() => toast.success("Copied"))}>Copy</button>
+                  <button className="btn-secondary" onClick={() => downloadTxt(`${story.title}.txt`, story.generated_story)}>TXT</button>
+                  <button className="btn-secondary" onClick={() => downloadPdf(`${story.title}.pdf`, story.title, story.generated_story)}>PDF</button>
+                  <button className="btn-secondary" onClick={() => deleteStory(story.id)}>Delete</button>
                 </div>
               </div>
-              <div className="flex flex-wrap gap-2 lg:justify-end">
-                <StarRating value={story.rating} onChange={(rating) => rate(story.id, rating)} />
-                <button className="btn-secondary" onClick={() => setEditing(story)}>Edit</button>
-                <button className="btn-secondary" onClick={() => copyText(story.generated_story).then(() => toast.success("Copied"))}>Copy</button>
-                <button className="btn-secondary" onClick={() => downloadTxt(`${story.title}.txt`, story.generated_story)}>TXT</button>
-                <button className="btn-secondary" onClick={() => downloadPdf(`${story.title}.pdf`, story.title, story.generated_story)}>PDF</button>
-                <button className="btn-secondary" onClick={() => deleteStory(story.id)}>Delete</button>
-              </div>
-            </div>
-          </Card>
+            </Card>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
       {editing && (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4">
           <Card className="w-full max-w-3xl space-y-4">
@@ -456,7 +417,6 @@ export default function App() {
     Dashboard: <Dashboard analytics={analytics} />,
     "Story Generator": <GeneratorPage onSaved={refresh} />,
     "Story Completion": <CompletionPage onSaved={refresh} />,
-    "Model Comparison": <ComparisonPage />,
     "Story Library": <LibraryPage onSaved={refresh} />,
     Analytics: <AnalyticsPage analytics={analytics} />,
     Ratings: <RatingsPage analytics={analytics} />,

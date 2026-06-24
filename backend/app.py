@@ -56,26 +56,6 @@ def create_app() -> Flask:
             current_app.logger.exception("Story completion failed")
             return error_response("Story completion failed. Check that the selected model is available and try again.", 500)
 
-    @app.post("/compare-models")
-    def compare_models():
-        payload = request.get_json(silent=True) or {}
-        prompt, prompt_error = validate_prompt(payload.get("prompt", ""))
-        if prompt_error:
-            return error_response(prompt_error)
-        params, param_error = validate_generation_params({**payload, "model": "gpt2"})
-        if param_error:
-            return error_response(param_error)
-        results = []
-        errors = []
-        for model in ["gpt2", "distilgpt2"]:
-            model_params = {**params, "model": model}
-            try:
-                results.append(engine.generate(prompt, model_params, mode="generation"))
-            except Exception as exc:
-                errors.append({"model": model, "error": str(exc)})
-        if not results:
-            return error_response("Model comparison failed for both models.", 500)
-        return jsonify({"success": True, "data": {"prompt": prompt, "results": results, "errors": errors}})
 
     @app.post("/save-story")
     def save_story():
@@ -93,6 +73,7 @@ def create_app() -> Flask:
             top_k = int(payload.get("top_k", 50))
             top_p = float(payload.get("top_p", 0.92))
             max_tokens = int(payload.get("max_tokens", 180))
+            language = payload.get("language", "English")
         except (TypeError, ValueError):
             return error_response("Story metadata contains invalid numeric values.")
         if rating and not 1 <= rating <= 5:
@@ -105,9 +86,9 @@ def create_app() -> Flask:
                 INSERT INTO stories (
                     title, prompt, genre, generated_story, original_text, continuation,
                     combined_story, summary, model_used, timestamp, rating, word_count,
-                    reading_time, generation_time, temperature, top_k, top_p, max_tokens, mode
+                    reading_time, generation_time, temperature, top_k, top_p, max_tokens, language, mode
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     payload["title"],
@@ -128,6 +109,7 @@ def create_app() -> Flask:
                     top_k,
                     top_p,
                     max_tokens,
+                    language,
                     payload.get("mode", "generation"),
                 ),
             )

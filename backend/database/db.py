@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS stories (
     top_k INTEGER NOT NULL,
     top_p REAL NOT NULL,
     max_tokens INTEGER NOT NULL,
+    language TEXT NOT NULL DEFAULT 'English',
     mode TEXT NOT NULL DEFAULT 'generation'
 );
 

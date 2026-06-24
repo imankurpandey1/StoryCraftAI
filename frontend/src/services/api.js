@@ -15,7 +15,6 @@ async function request(path, options = {}) {
 export const api = {
   generateStory: (body) => request("/generate-story", { method: "POST", body: JSON.stringify(body) }),
   completeStory: (body) => request("/complete-story", { method: "POST", body: JSON.stringify(body) }),
-  compareModels: (body) => request("/compare-models", { method: "POST", body: JSON.stringify(body) }),
   saveStory: (body) => request("/save-story", { method: "POST", body: JSON.stringify(body) }),
   getStories: (params = {}) => {
     const qs = new URLSearchParams(Object.entries(params).filter(([, value]) => value !== "" && value !== undefined)).toString();

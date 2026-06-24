@@ -51,20 +51,20 @@ class StoryCraftEngine:
             return "CPU"
 
     @staticmethod
-    def _prompt_template(prompt: str, genre: str, mode: str) -> str:
+    def _prompt_template(prompt: str, genre: str, mode: str, language: str) -> str:
         if mode == "completion":
-            return f"{prompt.rstrip()}\n"
-        return f"{genre} story:\n{prompt.rstrip()}\n"
+            return f"[{language}]\n{prompt.rstrip()}\n"
+        return f"[{language}] {genre} story:\n{prompt.rstrip()}\n"
 
     @classmethod
-    def _build_model_prompt(cls, generator, prompt: str, genre: str, mode: str, model_key: str) -> str:
+    def _build_model_prompt(cls, generator, prompt: str, genre: str, mode: str, model_key: str, language: str) -> str:
         if not Settings.MODEL_REGISTRY[model_key].get("chat_template"):
-            return cls._prompt_template(prompt, genre, mode)
+            return cls._prompt_template(prompt, genre, mode, language)
         task = "Continue the following unfinished story" if mode == "completion" else "Write a complete short story from the following premise"
         messages = [
             {
                 "role": "system",
-                "content": f"You are a creative writer. {task} in the {genre} genre. Keep the plot coherent, retain named details, and avoid repetition.",
+                "content": f"You are a creative writer. {task} in the {genre} genre. Write the story entirely in {language}. Keep the plot coherent, retain named details, and avoid repetition.",
             },
             {"role": "user", "content": prompt},
         ]
@@ -126,7 +126,8 @@ class StoryCraftEngine:
         before = process.memory_info().rss / (1024 * 1024)
         started = time.perf_counter()
         generator = self._load_pipeline(model_key)
-        full_prompt = self._build_model_prompt(generator, prompt, params["genre"], mode, model_key)
+        language = params.get("language", "English")
+        full_prompt = self._build_model_prompt(generator, prompt, params["genre"], mode, model_key, language)
         fitted_prompt = self._fit_prompt_to_context(generator, full_prompt, params["max_tokens"])
         outputs = generator(
             fitted_prompt,
@@ -163,6 +164,7 @@ class StoryCraftEngine:
             "combined_story": combined,
             "model_used": Settings.MODEL_REGISTRY[model_key]["label"],
             "model_key": model_key,
+            "language": language,
             "genre": params["genre"],
             "word_count": word_count(combined),
             "reading_time": reading_time_minutes(combined),

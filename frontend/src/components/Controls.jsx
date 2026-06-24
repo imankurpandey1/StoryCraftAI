@@ -1,8 +1,10 @@
 import { Download, FileText, RotateCcw, Save, Wand2 } from "lucide-react";
 
 export const genres = ["Fantasy", "Mystery", "Horror", "Sci-Fi", "Adventure", "Romance", "Mythology", "Children's Stories"];
+export const languages = ["English", "Spanish", "French", "German", "Italian", "Portuguese", "Japanese", "Chinese", "Hindi", "Russian"];
 
 export const defaultParams = {
+  language: "English",
   genre: "Fantasy",
   model: "qwen2.5-0.5b-instruct",
   temperature: 0.85,
