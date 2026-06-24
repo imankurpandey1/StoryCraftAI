@@ -106,8 +106,8 @@ function StoryResult({ result }) {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <select disabled={translating} onChange={handleTranslate} value="" className="btn-secondary h-auto py-3 px-4 text-sm font-bold appearance-none outline-none focus:ring-2 focus:ring-emerald-400/50">
-            <option value="" disabled>Translate...</option>
-            {languages.map((l) => <option key={l} value={l}>{l}</option>)}
+            <option value="" disabled className="bg-slate-900 text-white">Translate...</option>
+            {languages.map((l) => <option key={l} value={l} className="bg-slate-900 text-white">{l}</option>)}
           </select>
           <button onClick={toggleRecite} className={`btn-secondary h-auto py-3 px-4 text-sm font-bold ${isReciting ? "animate-pulse border-emerald-400 bg-emerald-400/20 shadow-[0_0_20px_rgba(16,185,129,0.5)]" : ""}`}>
             {isReciting ? <VolumeX size={18} /> : <Volume2 size={18} />}

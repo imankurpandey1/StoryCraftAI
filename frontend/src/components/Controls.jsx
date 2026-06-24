@@ -18,7 +18,7 @@ export function Select({ label, value, onChange, options }) {
       <span className="mb-2 block text-sm font-semibold text-slate-300">{label}</span>
       <select value={value} onChange={(event) => onChange(event.target.value)} className="input">
         {options.map((option) => (
-          <option key={option.value || option} value={option.value || option}>{option.label || option}</option>
+          <option key={option.value || option} value={option.value || option} className="bg-slate-900 text-white">{option.label || option}</option>
         ))}
       </select>
     </label>
