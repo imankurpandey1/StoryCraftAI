@@ -1,3 +1,12 @@
+---
+title: StoryCraft AI
+emoji: 📚
+colorFrom: blue
+colorTo: green
+sdk: docker
+app_port: 7860
+---
+
 # StoryCraft AI
 
 **Intelligent Story Generation & Completion Platform**
