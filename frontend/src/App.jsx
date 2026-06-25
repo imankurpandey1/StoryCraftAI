@@ -238,12 +238,27 @@ function InteractiveBuilder({ prompt, setPrompt, onGenerate }) {
 }
 
 function GeneratorPage({ onSaved }) {
-  const [params, setParams] = useState(defaultParams);
-  const [prompt, setPrompt] = useState("");
+  const [params, setParams] = useState(() => {
+    try {
+      const saved = localStorage.getItem("jananiai-params");
+      return saved ? JSON.parse(saved) : defaultParams;
+    } catch {
+      return defaultParams;
+    }
+  });
+  const [prompt, setPrompt] = useState(localStorage.getItem("jananiai-prompt") || "");
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState("static");
   const storyText = result?.combined_story || result?.generated_story || "";
+
+  useEffect(() => {
+    localStorage.setItem("jananiai-params", JSON.stringify(params));
+  }, [params]);
+
+  useEffect(() => {
+    localStorage.setItem("jananiai-prompt", prompt);
+  }, [prompt]);
 
   const generate = async () => {
     setLoading(true);
@@ -372,7 +387,7 @@ function StarRating({ value, onChange }) {
 
 function LibraryPage({ onSaved }) {
   const [stories, setStories] = useState([]);
-  const [tab, setTab] = useState("private");
+  const [tab, setTab] = useState("public");
   const [filters, setFilters] = useState({ search: "", genre: "", min_rating: "" });
   const [editing, setEditing] = useState(null);
 

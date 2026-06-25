@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, BookOpen, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2 } from "lucide-react";
+import { BarChart3, BookOpen, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2, Menu, X } from "lucide-react";
 
 const navItems = [
   ["Insights", BarChart3],
@@ -10,18 +11,39 @@ const navItems = [
 ];
 
 export default function Shell({ page, setPage, children, theme, setTheme }) {
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
   return (
     <div className={`min-h-screen ${theme === "dark" ? "dark-theme" : "light-theme"}`}>
       <div className="flex min-h-screen">
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-xl lg:block">
-          <div className="mb-8 flex items-center px-2">
+        {/* Mobile Backdrop */}
+        {isSidebarOpen && (
+          <div 
+            className="fixed inset-0 z-20 bg-black/50 lg:hidden" 
+            onClick={() => setIsSidebarOpen(false)}
+          />
+        )}
+        
+        {/* Sidebar */}
+        <aside 
+          className={`fixed inset-y-0 left-0 z-30 w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-xl transition-transform duration-300 ${
+            isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+        >
+          <div className="mb-8 flex items-center justify-between px-2">
             <img src="/logo.png" alt="JananiAI Logo" className="h-16 w-auto object-contain" />
+            <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-1 text-red-500 hover:bg-white/10 rounded-lg">
+              <X size={20} />
+            </button>
           </div>
           <nav className="space-y-2">
             {navItems.map(([label, Icon]) => (
               <button
                 key={label}
-                onClick={() => setPage(label)}
+                onClick={() => {
+                  setPage(label);
+                  if (window.innerWidth < 1024) setIsSidebarOpen(false);
+                }}
                 className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition ${
                   page === label ? "bg-red-500 text-slate-950 shadow-glow" : "text-red-500 hover:bg-red-500/10 hover:text-red-400"
                 }`}
@@ -32,10 +54,14 @@ export default function Shell({ page, setPage, children, theme, setTheme }) {
             ))}
           </nav>
         </aside>
-        <main className="w-full lg:pl-72">
+
+        <main className={`w-full transition-all duration-300 ${isSidebarOpen ? "lg:pl-72" : ""}`}>
           <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/45 px-4 py-4 backdrop-blur-xl sm:px-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex items-center">
+              <div className="flex items-center gap-4">
+                <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-red-500 hover:bg-white/10 rounded-lg">
+                  <Menu size={24} />
+                </button>
                 <img src="/logo.png" alt="JananiAI Logo" className="h-16 sm:h-20 w-auto object-contain" />
               </div>
               <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:hidden">
