@@ -10,10 +10,13 @@ from backend.config.settings import Settings
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     name TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    reset_token TEXT,
+    reset_token_expiry TEXT
 );
 
 CREATE TABLE IF NOT EXISTS stories (
@@ -48,9 +51,8 @@ CREATE INDEX IF NOT EXISTS idx_stories_timestamp ON stories(timestamp);
 CREATE INDEX IF NOT EXISTS idx_stories_genre ON stories(genre);
 CREATE INDEX IF NOT EXISTS idx_stories_model ON stories(model_used);
 CREATE INDEX IF NOT EXISTS idx_stories_rating ON stories(rating);
-CREATE INDEX IF NOT EXISTS idx_stories_user_id ON stories(user_id);
+CREATE INDEX IF NOT EXISTS idx_stories_rating ON stories(rating);
 """
-
 
 def ensure_database() -> None:
     Settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
@@ -59,6 +61,19 @@ def ensure_database() -> None:
         # Try to add user_id column if it doesn't exist for backward compatibility
         try:
             conn.execute("ALTER TABLE stories ADD COLUMN user_id INTEGER REFERENCES users(id)")
+        except sqlite3.OperationalError:
+            pass
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_stories_user_id ON stories(user_id)")
+        
+        # Try to add new users columns for backward compatibility
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN username TEXT UNIQUE")
+            conn.execute("UPDATE users SET username = 'user_' || id WHERE username IS NULL")
+        except sqlite3.OperationalError:
+            pass
+        try:
+            conn.execute("ALTER TABLE users ADD COLUMN reset_token TEXT")
+            conn.execute("ALTER TABLE users ADD COLUMN reset_token_expiry TEXT")
         except sqlite3.OperationalError:
             pass
         conn.commit()

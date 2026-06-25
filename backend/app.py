@@ -41,7 +41,7 @@ def create_app() -> Flask:
             try:
                 data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
                 with get_connection() as conn:
-                    current_user = row_to_dict(conn.execute("SELECT id, email, name FROM users WHERE id = ?", (data["user_id"],)).fetchone())
+                    current_user = row_to_dict(conn.execute("SELECT id, email, username, name FROM users WHERE id = ?", (data["user_id"],)).fetchone())
                 if not current_user:
                     raise Exception("User not found")
             except Exception as e:
@@ -62,7 +62,7 @@ def create_app() -> Flask:
                 try:
                     data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
                     with get_connection() as conn:
-                        current_user = row_to_dict(conn.execute("SELECT id, email, name FROM users WHERE id = ?", (data["user_id"],)).fetchone())
+                        current_user = row_to_dict(conn.execute("SELECT id, email, username, name FROM users WHERE id = ?", (data["user_id"],)).fetchone())
                 except Exception:
                     pass
             return f(current_user, *args, **kwargs)
@@ -72,18 +72,19 @@ def create_app() -> Flask:
     def register():
         payload = request.get_json(silent=True) or {}
         email = payload.get("email", "").strip()
+        username = payload.get("username", "").strip()
         password = payload.get("password", "")
         name = payload.get("name", "").strip()
         
-        if not email or not password or not name:
-            return error_response("Email, password, and name are required.")
+        if not email or not username or not password or not name:
+            return error_response("Email, username, password, and name are required.")
             
         password_hash = generate_password_hash(password)
         try:
             with get_connection() as conn:
                 cursor = conn.execute(
-                    "INSERT INTO users (email, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
-                    (email, password_hash, name, utc_now_iso())
+                    "INSERT INTO users (email, username, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)",
+                    (email, username, password_hash, name, utc_now_iso())
                 )
                 conn.commit()
                 user_id = cursor.lastrowid
@@ -93,21 +94,21 @@ def create_app() -> Flask:
                 app.config["SECRET_KEY"],
                 algorithm="HS256"
             )
-            return jsonify({"success": True, "data": {"token": token, "user": {"id": user_id, "email": email, "name": name}}}), 201
+            return jsonify({"success": True, "data": {"token": token, "user": {"id": user_id, "email": email, "username": username, "name": name}}}), 201
         except sqlite3.IntegrityError:
-            return error_response("Email already registered.")
+            return error_response("Email or username already registered.")
 
     @app.post("/auth/login")
     def login():
         payload = request.get_json(silent=True) or {}
-        email = payload.get("email", "").strip()
+        identifier = payload.get("email", "").strip() # can be email or username
         password = payload.get("password", "")
         
-        if not email or not password:
-            return error_response("Email and password are required.")
+        if not identifier or not password:
+            return error_response("Email/Username and password are required.")
             
         with get_connection() as conn:
-            user = row_to_dict(conn.execute("SELECT id, email, name, password_hash FROM users WHERE email = ?", (email,)).fetchone())
+            user = row_to_dict(conn.execute("SELECT id, email, username, name, password_hash FROM users WHERE email = ? OR username = ?", (identifier, identifier)).fetchone())
             
         if user and check_password_hash(user["password_hash"], password):
             token = jwt.encode(
@@ -115,7 +116,7 @@ def create_app() -> Flask:
                 app.config["SECRET_KEY"],
                 algorithm="HS256"
             )
-            return jsonify({"success": True, "data": {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}}), 200
+            return jsonify({"success": True, "data": {"token": token, "user": {"id": user["id"], "email": user["email"], "username": user["username"], "name": user["name"]}}}), 200
             
         return error_response("Invalid email or password.", 401)
 
@@ -135,29 +136,95 @@ def create_app() -> Flask:
                 return error_response("Google token did not contain an email.", 400)
                 
             with get_connection() as conn:
-                user = row_to_dict(conn.execute("SELECT id, email, name, password_hash FROM users WHERE email = ?", (email,)).fetchone())
+                user = row_to_dict(conn.execute("SELECT id, email, username, name, password_hash FROM users WHERE email = ?", (email,)).fetchone())
                 
                 if not user:
                     # Create the user if they don't exist
-                    # We generate a random password hash since they use Google login
                     password_hash = generate_password_hash("google-auth-no-password")
+                    import secrets
+                    username = f"user_{secrets.token_hex(4)}"
                     cursor = conn.execute(
-                        "INSERT INTO users (email, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
-                        (email, password_hash, name, utc_now_iso())
+                        "INSERT INTO users (email, username, password_hash, name, created_at) VALUES (?, ?, ?, ?, ?)",
+                        (email, username, password_hash, name, utc_now_iso())
                     )
                     conn.commit()
                     user_id = cursor.lastrowid
                 else:
                     user_id = user["id"]
+                    username = user["username"]
                     
             jwt_token = jwt.encode(
                 {"user_id": user_id, "exp": datetime.utcnow() + timedelta(days=7)},
                 app.config["SECRET_KEY"],
                 algorithm="HS256"
             )
-            return jsonify({"success": True, "data": {"token": jwt_token, "user": {"id": user_id, "email": email, "name": name}}}), 200
+            return jsonify({"success": True, "data": {"token": jwt_token, "user": {"id": user_id, "email": email, "username": username, "name": name}}}), 200
         except ValueError as e:
             return error_response(f"Invalid Google token: {str(e)}", 401)
+
+    @app.post("/auth/forgot-password")
+    def forgot_password():
+        payload = request.get_json(silent=True) or {}
+        identifier = payload.get("email", "").strip()
+        if not identifier:
+            return error_response("Email or username is required.")
+            
+        with get_connection() as conn:
+            user = row_to_dict(conn.execute("SELECT id FROM users WHERE email = ? OR username = ?", (identifier, identifier)).fetchone())
+            if not user:
+                return error_response("No account found with that email/username.")
+                
+            import random
+            import string
+            reset_token = ''.join(random.choices(string.digits, k=6))
+            expiry = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+            
+            conn.execute("UPDATE users SET reset_token = ?, reset_token_expiry = ? WHERE id = ?", (reset_token, expiry, user["id"]))
+            conn.commit()
+            
+        # In a real app, send email. Here, we just return the token for the UI to show.
+        return jsonify({"success": True, "data": {"message": "Reset code generated.", "mock_code": reset_token}}), 200
+
+    @app.post("/auth/reset-password")
+    def reset_password():
+        payload = request.get_json(silent=True) or {}
+        identifier = payload.get("email", "").strip()
+        reset_token = payload.get("code", "").strip()
+        new_password = payload.get("password", "")
+        
+        if not identifier or not reset_token or not new_password:
+            return error_response("All fields are required.")
+            
+        with get_connection() as conn:
+            user = row_to_dict(conn.execute("SELECT id, reset_token, reset_token_expiry FROM users WHERE email = ? OR username = ?", (identifier, identifier)).fetchone())
+            
+            if not user or user["reset_token"] != reset_token:
+                return error_response("Invalid or missing reset code.")
+                
+            if datetime.fromisoformat(user["reset_token_expiry"]) < datetime.utcnow():
+                return error_response("Reset code has expired.")
+                
+            conn.execute("UPDATE users SET password_hash = ?, reset_token = NULL, reset_token_expiry = NULL WHERE id = ?", (generate_password_hash(new_password), user["id"]))
+            conn.commit()
+            
+        return jsonify({"success": True, "data": {"message": "Password successfully updated. You may now log in."}}), 200
+
+    @app.post("/auth/change-password")
+    @token_required
+    def change_password(current_user):
+        payload = request.get_json(silent=True) or {}
+        old_password = payload.get("old_password", "")
+        new_password = payload.get("new_password", "")
+        
+        with get_connection() as conn:
+            user = row_to_dict(conn.execute("SELECT password_hash FROM users WHERE id = ?", (current_user["id"],)).fetchone())
+            if not check_password_hash(user["password_hash"], old_password):
+                return error_response("Incorrect current password.")
+                
+            conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (generate_password_hash(new_password), current_user["id"]))
+            conn.commit()
+            
+        return jsonify({"success": True, "data": {"message": "Password changed successfully."}}), 200
 
     @app.get("/auth/profile")
     @token_required

@@ -486,12 +486,31 @@ function LibraryPage({ onSaved }) {
 function ProfilePage({ theme, setTheme, onSaved }) {
   const { user, logout } = useAuth();
   const [profile, setProfile] = useState(null);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   useEffect(() => {
     if (user) {
       api.getProfile().then(setProfile).catch(err => toast.error(err.message));
     }
   }, [user]);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    if (!oldPassword || !newPassword) return;
+    setChangingPassword(true);
+    try {
+      await api.changePassword({ old_password: oldPassword, new_password: newPassword });
+      toast.success("Password changed successfully.");
+      setOldPassword("");
+      setNewPassword("");
+    } catch (err) {
+      toast.error(err.message);
+    } finally {
+      setChangingPassword(false);
+    }
+  };
 
   if (!user) return null;
 
@@ -503,6 +522,7 @@ function ProfilePage({ theme, setTheme, onSaved }) {
         <div className="mt-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
           <div><p className="font-bold">Name</p><p className="text-sm text-red-500">{user.name}</p></div>
           <div><p className="font-bold">Email</p><p className="text-sm text-red-500">{user.email}</p></div>
+          <div><p className="font-bold">Username</p><p className="text-sm text-red-500">{user.username}</p></div>
           <div className="grid grid-cols-2 gap-4 mt-2">
             <div><p className="font-bold text-xl">{profile?.total_stories || 0}</p><p className="text-xs text-red-500">Stories Generated</p></div>
             <div><p className="font-bold text-xl">{profile?.total_words || 0}</p><p className="text-xs text-red-500">Words Written</p></div>
@@ -510,22 +530,39 @@ function ProfilePage({ theme, setTheme, onSaved }) {
           <button className="btn-secondary mt-2 w-full" onClick={logout}>Log Out</button>
         </div>
       </Card>
-      <Card>
-        <h3 className="text-xl font-black">Application Settings</h3>
-        <p className="mt-2 text-sm text-red-500">Control presentation and local development options.</p>
-        <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4">
-          <div><p className="font-bold">Theme</p><p className="text-sm text-red-500">Toggle dark and light UI modes.</p></div>
-          <button className="btn-primary" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Light" : "Dark"}</button>
-        </div>
-      </Card>
+      
+      <div className="space-y-6">
+        <Card>
+          <h3 className="text-xl font-black">Application Settings</h3>
+          <p className="mt-2 text-sm text-red-500">Control presentation and local development options.</p>
+          <div className="mt-6 flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div><p className="font-bold">Theme</p><p className="text-sm text-red-500">Toggle dark and light UI modes.</p></div>
+            <button className="btn-primary" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? "Light" : "Dark"}</button>
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="text-xl font-black">Change Password</h3>
+          <p className="mt-2 text-sm text-red-500">Update your account password.</p>
+          <form onSubmit={handleChangePassword} className="mt-6 flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <input required type="password" placeholder="Current Password" value={oldPassword} onChange={e => setOldPassword(e.target.value)} className="input" />
+            <input required type="password" placeholder="New Password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="input" />
+            <button disabled={changingPassword} type="submit" className="btn-primary w-full">{changingPassword ? "Updating..." : "Change Password"}</button>
+          </form>
+        </Card>
+      </div>
     </div>
   );
 }
 
 function AuthScreen() {
   const [isLogin, setIsLogin] = useState(true);
+  const [isForgot, setIsForgot] = useState(false);
+  const [isReset, setIsReset] = useState(false);
   const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [resetCode, setResetCode] = useState("");
   const [name, setName] = useState("");
   const { login } = useAuth();
   const [loading, setLoading] = useState(false);
@@ -535,10 +572,23 @@ function AuthScreen() {
     setLoading(true);
     try {
       let res;
-      if (isLogin) {
+      if (isReset) {
+        res = await api.resetPassword({ email, code: resetCode, password });
+        toast.success("Password reset successful. Please log in.");
+        setIsReset(false);
+        setIsForgot(false);
+        setIsLogin(true);
+        return;
+      } else if (isForgot) {
+        res = await api.forgotPassword({ email });
+        toast.success(`Mock Email Sent! Your code is: ${res.mock_code}`, { duration: 10000 });
+        setIsForgot(false);
+        setIsReset(true);
+        return;
+      } else if (isLogin) {
         res = await api.login({ email, password });
       } else {
-        res = await api.register({ email, password, name });
+        res = await api.register({ email, username, password, name });
       }
       login(res.user, res.token);
       toast.success("Welcome to JananiAI!");
@@ -573,39 +623,74 @@ function AuthScreen() {
           <img src="/logo.png" alt="JananiAI Logo" className="h-20 w-auto object-contain" />
         </div>
         <Card className="space-y-6">
-          <h2 className="text-2xl font-black text-center">{isLogin ? "Welcome Back" : "Create Account"}</h2>
+          <h2 className="text-2xl font-black text-center">
+            {isReset ? "Reset Password" : isForgot ? "Forgot Password" : isLogin ? "Welcome Back" : "Create Account"}
+          </h2>
           <form onSubmit={handleSubmit} className="space-y-4">
-            {!isLogin && (
-              <input required className="input w-full" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} />
+            {isReset && (
+              <>
+                <input required className="input w-full" placeholder="Email or Username" value={email} onChange={e => setEmail(e.target.value)} />
+                <input required className="input w-full" placeholder="6-digit Reset Code" value={resetCode} onChange={e => setResetCode(e.target.value)} />
+                <input required type="password" className="input w-full" placeholder="New Password" value={password} onChange={e => setPassword(e.target.value)} />
+              </>
             )}
-            <input required type="email" className="input w-full" placeholder="Email Address" value={email} onChange={e => setEmail(e.target.value)} />
-            <input required type="password" className="input w-full" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+            
+            {isForgot && !isReset && (
+              <input required className="input w-full" placeholder="Email or Username" value={email} onChange={e => setEmail(e.target.value)} />
+            )}
+
+            {!isForgot && !isReset && (
+              <>
+                {!isLogin && (
+                  <>
+                    <input required className="input w-full" placeholder="Full Name" value={name} onChange={e => setName(e.target.value)} />
+                    <input required className="input w-full" placeholder="Choose a Username" value={username} onChange={e => setUsername(e.target.value)} />
+                  </>
+                )}
+                <input required className="input w-full" placeholder={isLogin ? "Email or Username" : "Email Address"} value={email} onChange={e => setEmail(e.target.value)} />
+                <input required type="password" className="input w-full" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
+                {isLogin && (
+                  <div className="flex justify-end">
+                    <button type="button" onClick={() => setIsForgot(true)} className="text-sm text-red-500 hover:underline">Forgot password?</button>
+                  </div>
+                )}
+              </>
+            )}
             <button disabled={loading} type="submit" className="btn-primary w-full text-center flex justify-center">
-              {loading ? "Please wait..." : (isLogin ? "Log In" : "Register")}
+              {loading ? "Please wait..." : (isReset ? "Reset Password" : isForgot ? "Send Reset Code" : isLogin ? "Log In" : "Register")}
             </button>
           </form>
           
-          <div className="relative flex py-2 items-center">
-            <div className="flex-grow border-t border-white/10"></div>
-            <span className="shrink-0 px-4 text-xs text-red-500 uppercase">Or continue with</span>
-            <div className="flex-grow border-t border-white/10"></div>
-          </div>
-          
-          <div className="flex justify-center w-full">
-            <GoogleLogin
-              onSuccess={handleGoogleSuccess}
-              onError={handleGoogleError}
-              theme="filled_black"
-              size="large"
-              width="360"
-            />
-          </div>
+          {(!isForgot && !isReset) && (
+            <>
+              <div className="relative flex py-2 items-center">
+                <div className="flex-grow border-t border-white/10"></div>
+                <span className="shrink-0 px-4 text-xs text-red-500 uppercase">Or continue with</span>
+                <div className="flex-grow border-t border-white/10"></div>
+              </div>
+              
+              <div className="flex justify-center w-full">
+                <GoogleLogin
+                  onSuccess={handleGoogleSuccess}
+                  onError={handleGoogleError}
+                  theme="filled_black"
+                  size="large"
+                  width="360"
+                />
+              </div>
+            </>
+          )}
           
           <div className="text-center text-sm text-red-500 pt-2">
-            {isLogin ? "Don't have an account?" : "Already have an account?"}{" "}
-            <button type="button" onClick={() => setIsLogin(!isLogin)} className="font-bold text-white hover:underline">
-              {isLogin ? "Sign Up" : "Log In"}
-            </button>
+            {(isForgot || isReset) ? (
+              <button type="button" onClick={() => { setIsForgot(false); setIsReset(false); setIsLogin(true); }} className="font-bold text-white hover:underline">
+                Back to Login
+              </button>
+            ) : isLogin ? (
+              <>Don't have an account? <button type="button" onClick={() => setIsLogin(false)} className="font-bold text-white hover:underline">Sign Up</button></>
+            ) : (
+              <>Already have an account? <button type="button" onClick={() => setIsLogin(true)} className="font-bold text-white hover:underline">Log In</button></>
+            )}
           </div>
         </Card>
       </div>
