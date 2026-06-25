@@ -2,12 +2,10 @@ import { motion } from "framer-motion";
 import { BarChart3, BookOpen, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2 } from "lucide-react";
 
 const navItems = [
-  ["Dashboard", Home],
+  ["Insights", BarChart3],
   ["Story Generator", Wand2],
   ["Story Completion", Sparkles],
   ["Story Library", Library],
-  ["Analytics", BarChart3],
-  ["Ratings", Star],
   ["Settings", Settings]
 ];
 

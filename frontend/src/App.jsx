@@ -132,7 +132,7 @@ function StoryResult({ result }) {
   );
 }
 
-function Dashboard({ analytics }) {
+function InsightsPage({ analytics }) {
   const empty = !analytics;
   return (
     <div className="space-y-6">
@@ -159,18 +159,41 @@ function Dashboard({ analytics }) {
           <h3 className="mb-4 text-lg font-black">Performance Analytics</h3>
           <LineMetricChart data={analytics?.performance || []} />
         </Card>
+        <Card className="xl:col-span-2">
+          <h3 className="mb-4 text-lg font-black">Rating Distribution</h3>
+          <BarMetricChart data={analytics?.rating_distribution || []} xKey="rating" bars={[{ key: "count", name: "Stories" }]} />
+        </Card>
       </div>
-      <Card>
-        <h3 className="mb-4 text-lg font-black">Recent Stories</h3>
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {(analytics?.recent_stories || []).map((story) => (
-            <div key={story.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <p className="font-bold">{story.title}</p>
-              <p className="mt-2 line-clamp-3 text-sm text-slate-400">{story.generated_story}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <h3 className="mb-4 text-lg font-black">Recent Stories</h3>
+          <div className="grid gap-3">
+            {(analytics?.recent_stories || []).slice(0, 4).map((story) => (
+              <div key={story.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="flex justify-between gap-3"><strong>{story.title}</strong><span className="text-slate-400 text-sm">{story.genre}</span></div>
+                <p className="mt-2 line-clamp-2 text-sm text-slate-400">{story.generated_story}</p>
+              </div>
+            ))}
+            {(!analytics?.recent_stories || analytics.recent_stories.length === 0) && (
+              <p className="text-slate-400 text-sm italic">No stories generated yet.</p>
+            )}
+          </div>
+        </Card>
+        <Card>
+          <h3 className="mb-4 text-lg font-black">Top Rated Stories</h3>
+          <div className="grid gap-3">
+            {(analytics?.top_rated || []).slice(0, 4).map((story) => (
+              <div key={story.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="flex justify-between gap-3"><strong>{story.title}</strong><span className="text-gold">{story.rating} stars</span></div>
+                <p className="mt-2 line-clamp-2 text-sm text-slate-400">{story.generated_story}</p>
+              </div>
+            ))}
+            {(!analytics?.top_rated || analytics.top_rated.length === 0) && (
+              <p className="text-slate-400 text-sm italic">No stories rated yet.</p>
+            )}
+          </div>
+        </Card>
+      </div>
     </div>
   );
 }
@@ -446,44 +469,6 @@ function LibraryPage({ onSaved }) {
   );
 }
 
-function AnalyticsPage({ analytics }) {
-  return (
-    <div className="grid gap-6 xl:grid-cols-2">
-      <Card><h3 className="mb-4 text-lg font-black">Stories Per Day</h3><TrendChart data={analytics?.generation_trends || []} /></Card>
-      <Card><h3 className="mb-4 text-lg font-black">Model Usage</h3><DonutChart data={analytics?.model_usage || []} /></Card>
-      <Card><h3 className="mb-4 text-lg font-black">Genre Popularity</h3><DonutChart data={analytics?.genre_distribution || []} /></Card>
-      <Card><h3 className="mb-4 text-lg font-black">Generation Speed Comparisons</h3><LineMetricChart data={analytics?.performance || []} /></Card>
-      <Card className="xl:col-span-2">
-        <h3 className="mb-4 text-lg font-black">Rating Distribution</h3>
-        <BarMetricChart data={analytics?.rating_distribution || []} xKey="rating" bars={[{ key: "count", name: "Stories" }]} />
-      </Card>
-    </div>
-  );
-}
-
-function RatingsPage({ analytics }) {
-  return (
-    <div className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-3">
-        <MetricCard label="Average Rating" value={analytics?.average_rating || 0} icon={Star} />
-        <MetricCard label="Rated Stories" value={(analytics?.top_rated || []).length} icon={BookOpen} />
-        <MetricCard label="Total Library" value={analytics?.total_stories || 0} icon={Database} />
-      </div>
-      <Card><h3 className="mb-4 text-lg font-black">Rating Distribution</h3><BarMetricChart data={analytics?.rating_distribution || []} xKey="rating" bars={[{ key: "count", name: "Stories" }]} /></Card>
-      <Card>
-        <h3 className="mb-4 text-lg font-black">Top Rated Stories</h3>
-        <div className="grid gap-3 md:grid-cols-2">
-          {(analytics?.top_rated || []).map((story) => (
-            <div key={story.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-              <div className="flex justify-between gap-3"><strong>{story.title}</strong><span className="text-gold">{story.rating} stars</span></div>
-              <p className="mt-2 line-clamp-3 text-sm text-slate-400">{story.generated_story}</p>
-            </div>
-          ))}
-        </div>
-      </Card>
-    </div>
-  );
-}
 
 function SettingsPage({ theme, setTheme }) {
   return (
@@ -505,18 +490,16 @@ function SettingsPage({ theme, setTheme }) {
 }
 
 export default function App() {
-  const [page, setPage] = useState("Dashboard");
+  const [page, setPage] = useState("Insights");
   const [theme, setTheme] = useState(localStorage.getItem("jananiai-theme") || "dark");
   const { analytics, refresh } = useAnalytics();
   useEffect(() => { localStorage.setItem("jananiai-theme", theme); }, [theme]);
 
   const pages = {
-    Dashboard: <Dashboard analytics={analytics} />,
+    Insights: <InsightsPage analytics={analytics} />,
     "Story Generator": <GeneratorPage onSaved={refresh} />,
     "Story Completion": <CompletionPage onSaved={refresh} />,
     "Story Library": <LibraryPage onSaved={refresh} />,
-    Analytics: <AnalyticsPage analytics={analytics} />,
-    Ratings: <RatingsPage analytics={analytics} />,
     Settings: <SettingsPage theme={theme} setTheme={setTheme} />
   };
 
