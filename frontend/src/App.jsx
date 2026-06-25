@@ -506,9 +506,9 @@ function SettingsPage({ theme, setTheme }) {
 
 export default function App() {
   const [page, setPage] = useState("Dashboard");
-  const [theme, setTheme] = useState(localStorage.getItem("storycraft-theme") || "dark");
+  const [theme, setTheme] = useState(localStorage.getItem("jananiai-theme") || "dark");
   const { analytics, refresh } = useAnalytics();
-  useEffect(() => { localStorage.setItem("storycraft-theme", theme); }, [theme]);
+  useEffect(() => { localStorage.setItem("jananiai-theme", theme); }, [theme]);
 
   const pages = {
     Dashboard: <Dashboard analytics={analytics} />,

@@ -21,7 +21,7 @@ export default function Shell({ page, setPage, children, theme, setTheme }) {
               <Gauge size={24} />
             </div>
             <div>
-              <p className="text-lg font-black tracking-tight">StoryCraft AI</p>
+              <p className="text-lg font-black tracking-tight">JananiAI</p>
               <p className="text-xs text-emerald-200">Generative NLP Studio</p>
             </div>
           </div>

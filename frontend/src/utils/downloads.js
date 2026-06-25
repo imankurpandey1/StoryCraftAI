@@ -20,7 +20,7 @@ export async function downloadPdf(filename, title, text) {
   const lines = doc.splitTextToSize(text, 180);
   doc.setFont("times", "bold");
   doc.setFontSize(18);
-  doc.text(title || "StoryCraft AI Story", 14, 18);
+  doc.text(title || "JananiAI Story", 14, 18);
   doc.setFont("times", "normal");
   doc.setFontSize(11);
   let y = 30;
