@@ -15,7 +15,7 @@ export default function Shell({ page, setPage, children, theme, setTheme }) {
       <div className="flex min-h-screen">
         <aside className="fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-white/10 bg-slate-950/70 p-5 backdrop-blur-xl lg:block">
           <div className="mb-8 flex items-center px-2">
-            <img src="/logo.png" alt="JananiAI Logo" className="h-14 w-auto object-contain" />
+            <img src="/logo.png" alt="JananiAI Logo" className="h-16 w-auto object-contain" />
           </div>
           <nav className="space-y-2">
             {navItems.map(([label, Icon]) => (
@@ -36,7 +36,7 @@ export default function Shell({ page, setPage, children, theme, setTheme }) {
           <header className="sticky top-0 z-20 border-b border-white/10 bg-slate-950/45 px-4 py-4 backdrop-blur-xl sm:px-8">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="flex items-center">
-                <img src="/logo.png" alt="JananiAI Logo" className="h-10 sm:h-12 w-auto object-contain" />
+                <img src="/logo.png" alt="JananiAI Logo" className="h-16 sm:h-20 w-auto object-contain" />
               </div>
               <div className="flex items-center gap-2 overflow-x-auto pb-1 lg:hidden">
                 {navItems.map(([label]) => (
