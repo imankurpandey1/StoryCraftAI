@@ -1,13 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { BarChart3, BookOpen, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2, Menu, X } from "lucide-react";
+import { BarChart3, BookOpen, Gauge, Home, Library, Moon, Settings, Sparkles, Star, Sun, Wand2, Menu, X, User } from "lucide-react";
 
 const navItems = [
   ["Insights", BarChart3],
   ["Story Generator", Wand2],
   ["Story Completion", Sparkles],
   ["Story Library", Library],
-  ["Settings", Settings]
+  ["Profile", User]
 ];
 
 export default function Shell({ page, setPage, children, theme, setTheme }) {

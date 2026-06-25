@@ -9,6 +9,12 @@ from backend.database.db import ensure_database, get_connection, row_to_dict, ro
 from backend.utils import utc_now_iso
 from backend.validation import validate_generation_params, validate_prompt, validate_rating, validate_story_id
 
+import sqlite3
+import jwt
+from functools import wraps
+from werkzeug.security import generate_password_hash, check_password_hash
+from datetime import datetime, timedelta
+
 
 def error_response(message: str, status: int = 400):
     return jsonify({"success": False, "error": message}), status
@@ -19,6 +25,109 @@ def create_app() -> Flask:
     app.config.from_object(Settings)
     CORS(app, resources={r"/*": {"origins": Settings.CORS_ORIGINS}})
     ensure_database()
+
+    def token_required(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            token = None
+            if "Authorization" in request.headers:
+                parts = request.headers["Authorization"].split()
+                if len(parts) == 2 and parts[0] == "Bearer":
+                    token = parts[1]
+            if not token:
+                return jsonify({"success": False, "error": "Token is missing"}), 401
+            try:
+                data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+                with get_connection() as conn:
+                    current_user = row_to_dict(conn.execute("SELECT id, email, name FROM users WHERE id = ?", (data["user_id"],)).fetchone())
+                if not current_user:
+                    raise Exception("User not found")
+            except Exception as e:
+                return jsonify({"success": False, "error": "Token is invalid"}), 401
+            return f(current_user, *args, **kwargs)
+        return decorated
+
+    def optional_token(f):
+        @wraps(f)
+        def decorated(*args, **kwargs):
+            token = None
+            current_user = None
+            if "Authorization" in request.headers:
+                parts = request.headers["Authorization"].split()
+                if len(parts) == 2 and parts[0] == "Bearer":
+                    token = parts[1]
+            if token:
+                try:
+                    data = jwt.decode(token, app.config["SECRET_KEY"], algorithms=["HS256"])
+                    with get_connection() as conn:
+                        current_user = row_to_dict(conn.execute("SELECT id, email, name FROM users WHERE id = ?", (data["user_id"],)).fetchone())
+                except Exception:
+                    pass
+            return f(current_user, *args, **kwargs)
+        return decorated
+
+    @app.post("/auth/register")
+    def register():
+        payload = request.get_json(silent=True) or {}
+        email = payload.get("email", "").strip()
+        password = payload.get("password", "")
+        name = payload.get("name", "").strip()
+        
+        if not email or not password or not name:
+            return error_response("Email, password, and name are required.")
+            
+        password_hash = generate_password_hash(password)
+        try:
+            with get_connection() as conn:
+                cursor = conn.execute(
+                    "INSERT INTO users (email, password_hash, name, created_at) VALUES (?, ?, ?, ?)",
+                    (email, password_hash, name, utc_now_iso())
+                )
+                conn.commit()
+                user_id = cursor.lastrowid
+                
+            token = jwt.encode(
+                {"user_id": user_id, "exp": datetime.utcnow() + timedelta(days=7)},
+                app.config["SECRET_KEY"],
+                algorithm="HS256"
+            )
+            return jsonify({"success": True, "data": {"token": token, "user": {"id": user_id, "email": email, "name": name}}}), 201
+        except sqlite3.IntegrityError:
+            return error_response("Email already registered.")
+
+    @app.post("/auth/login")
+    def login():
+        payload = request.get_json(silent=True) or {}
+        email = payload.get("email", "").strip()
+        password = payload.get("password", "")
+        
+        if not email or not password:
+            return error_response("Email and password are required.")
+            
+        with get_connection() as conn:
+            user = row_to_dict(conn.execute("SELECT id, email, name, password_hash FROM users WHERE email = ?", (email,)).fetchone())
+            
+        if user and check_password_hash(user["password_hash"], password):
+            token = jwt.encode(
+                {"user_id": user["id"], "exp": datetime.utcnow() + timedelta(days=7)},
+                app.config["SECRET_KEY"],
+                algorithm="HS256"
+            )
+            return jsonify({"success": True, "data": {"token": token, "user": {"id": user["id"], "email": user["email"], "name": user["name"]}}}), 200
+            
+        return error_response("Invalid email or password.", 401)
+
+    @app.get("/auth/profile")
+    @token_required
+    def get_profile(current_user):
+        with get_connection() as conn:
+            stats = row_to_dict(conn.execute("SELECT COUNT(id) as total_stories, SUM(word_count) as total_words FROM stories WHERE user_id = ?", (current_user["id"],)).fetchone())
+            
+        current_user.update({
+            "total_stories": stats["total_stories"] or 0,
+            "total_words": stats["total_words"] or 0
+        })
+        return jsonify({"success": True, "data": current_user}), 200
 
     @app.get("/health")
     def health():
@@ -112,7 +221,8 @@ def create_app() -> Flask:
             return error_response("Chat failed. Try again.", 500)
 
     @app.post("/save-story")
-    def save_story():
+    @optional_token
+    def save_story(current_user):
         payload = request.get_json(silent=True) or {}
         required = ["title", "prompt", "genre", "generated_story", "model_used", "word_count", "reading_time", "generation_time"]
         missing = [field for field in required if payload.get(field) in [None, ""]]
@@ -138,14 +248,15 @@ def create_app() -> Flask:
             cursor = conn.execute(
                 """
                 INSERT INTO stories (
-                    title, prompt, genre, generated_story, original_text, continuation,
+                    user_id, title, prompt, genre, generated_story, original_text, continuation,
                     combined_story, summary, model_used, timestamp, rating, word_count,
                     reading_time, generation_time, temperature, top_k, top_p, max_tokens, language, mode,
                     visibility, author_name
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
+                    current_user["id"] if current_user else None,
                     payload["title"],
                     payload["prompt"],
                     payload["genre"],
@@ -175,7 +286,8 @@ def create_app() -> Flask:
         return jsonify({"success": True, "data": story}), 201
 
     @app.get("/get-stories")
-    def get_stories():
+    @optional_token
+    def get_stories(current_user):
         search = f"%{request.args.get('search', '').strip()}%"
         genre = request.args.get("genre", "").strip()
         model = request.args.get("model", "").strip()
@@ -185,9 +297,14 @@ def create_app() -> Flask:
             return error_response(rating_error)
         query = "SELECT * FROM stories WHERE (title LIKE ? OR prompt LIKE ? OR generated_story LIKE ?)"
         params = [search, search, search]
-        if visibility:
-            query += " AND visibility = ?"
-            params.append(visibility)
+        if visibility == "private":
+            if current_user:
+                query += " AND visibility = 'private' AND user_id = ?"
+                params.append(current_user["id"])
+            else:
+                return jsonify({"success": True, "data": []}), 200
+        elif visibility == "public":
+            query += " AND visibility = 'public'"
         if genre:
             query += " AND genre = ?"
             params.append(genre)

@@ -8,8 +8,17 @@ from backend.config.settings import Settings
 
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    name TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS stories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER,
     title TEXT NOT NULL,
     prompt TEXT NOT NULL,
     genre TEXT NOT NULL,
@@ -31,13 +40,15 @@ CREATE TABLE IF NOT EXISTS stories (
     language TEXT NOT NULL DEFAULT 'English',
     mode TEXT NOT NULL DEFAULT 'generation',
     visibility TEXT NOT NULL DEFAULT 'private',
-    author_name TEXT NOT NULL DEFAULT 'Anonymous'
+    author_name TEXT NOT NULL DEFAULT 'Anonymous',
+    FOREIGN KEY(user_id) REFERENCES users(id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_stories_timestamp ON stories(timestamp);
 CREATE INDEX IF NOT EXISTS idx_stories_genre ON stories(genre);
 CREATE INDEX IF NOT EXISTS idx_stories_model ON stories(model_used);
 CREATE INDEX IF NOT EXISTS idx_stories_rating ON stories(rating);
+CREATE INDEX IF NOT EXISTS idx_stories_user_id ON stories(user_id);
 """
 
 
@@ -45,6 +56,11 @@ def ensure_database() -> None:
     Settings.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     with sqlite3.connect(Settings.DB_PATH) as conn:
         conn.executescript(SCHEMA)
+        # Try to add user_id column if it doesn't exist for backward compatibility
+        try:
+            conn.execute("ALTER TABLE stories ADD COLUMN user_id INTEGER REFERENCES users(id)")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
 
